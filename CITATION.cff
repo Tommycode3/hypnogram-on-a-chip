@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below, and cite the Sleep-EDF dataset."
+title: "tiny-sleep: single-channel EEG sleep staging small enough for a microcontroller"
+authors:
+  - family-names: Maggiolo
+    given-names: Tommaso
+version: 0.1.0
+date-released: 2026-10-30
+license: MIT
+keywords: [sleep staging, EEG, TinyML, int8 quantization, microcontroller, Sleep-EDF]
+references:
+  - type: article
+    title: "Analysis of a sleep-dependent neuronal feedback loop: the slow-wave microcontinuity of the EEG"
+    authors:
+      - family-names: Kemp
+        given-names: B.
+      - family-names: Zwinderman
+        given-names: A. H.
+      - family-names: Tuk
+        given-names: B.
+      - family-names: Kamphuisen
+        given-names: H. A. C.
+      - family-names: Oberye
+        given-names: J. J. L.
+    journal: "IEEE Transactions on Biomedical Engineering"
+    year: 2000
+    doi: 10.1109/10.867928
+  - type: article
+    title: "PhysioBank, PhysioToolkit, and PhysioNet"
+    authors:
+      - family-names: Goldberger
+        given-names: A. L.
+    journal: "Circulation"
+    year: 2000
+    doi: 10.1161/01.CIR.101.23.e215

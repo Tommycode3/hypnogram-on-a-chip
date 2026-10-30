@@ -1,0 +1,27 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install (CPU-only torch, no dataset download)
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[dev]"
+      - name: C kernel compiles warning-free
+        run: |
+          python - <<'PY'
+          import torch
+          from tinysleep.models import TinySleepCNN
+          from tinysleep.quant import quantize_model, export_c_header
+          from tests.test_quant import synthetic_eeg
+          q = quantize_model(TinySleepCNN("m", context=4).eval(), synthetic_eeg(64))
+          export_c_header(q, "c/model_ci.h")
+          PY
+          cc -O2 -std=c99 -Wall -Wextra -Werror -pedantic -ffp-contract=off -DMODEL_H='"model_ci.h"' -Ic c/main.c c/tinysleep.c -o /tmp/ts
+      - name: Tests (synthetic data only; includes C == NumPy bit-exactness)
+        run: pytest -q

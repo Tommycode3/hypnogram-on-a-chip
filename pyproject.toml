@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tinysleep"
+version = "0.1.0"
+description = "Single-channel EEG sleep staging small enough for a microcontroller, with an int8 C kernel."
+authors = [{ name = "Tommaso Maggiolo", email = "maggiolotommaso@gmail.com" }]
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = ["numpy", "scipy", "scikit-learn", "matplotlib", "torch"]
+
+[project.optional-dependencies]
+data = ["mne>=1.6"]
+dev = ["pytest"]
+
+[tool.setuptools]
+packages = ["tinysleep"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
