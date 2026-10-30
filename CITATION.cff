@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below, and cite the Sleep-EDF dataset."
-title: "tiny-sleep: single-channel EEG sleep staging small enough for a microcontroller"
+title: "hypnogram-on-a-chip: single-channel EEG sleep staging small enough for a microcontroller"
 authors:
   - family-names: Maggiolo
     given-names: Tommaso

@@ -1,26 +1,21 @@
-# tiny-sleep
+# hypnogram-on-a-chip: sleep staging from one EEG channel in a few KiB of int8
 
-**Five-class sleep staging (W, N1, N2, N3, REM) from one forehead EEG channel, in a few kilobytes of int8, with a pure-C kernel that is bit-exact with its Python reference.**
+![Hypnogram of a held-out night: expert scoring, float model and int8 model](figures/hypnogram.png)
 
-Single channel Fpz-Cz from Sleep-EDF Expanded (sleep-cassette, first 20 subjects, 39 nights, 42 307 scored 30 s epochs), subject-wise 5-fold cross-validation, and an honest accuracy-vs-size Pareto study from 1.4 k to 47 k parameters.
+A 1-D CNN with 1.7k to 47k parameters scores 30 s epochs of single-channel Fpz-Cz EEG into W, N1, N2, N3 and REM, quantised to int8 and run by a 116-line C99 kernel that matches its Python reference bit for bit. On 20 Sleep-EDF subjects with subject-wise 5-fold cross-validation, a 9.6k-parameter model (11.4 KiB flash on a Cortex-M4F) reaches Cohen's κ 0.783 and accuracy 0.840. Going from 1.7k to 21k parameters adds only 0.017 κ; two minutes of causal context adds 0.04.
+
+<!-- TODO(Tommaso): your own words on why -->
 
 | | params | flash (Cortex-M4F) | RAM | accuracy | macro-F1 | Cohen's κ |
 |---|---|---|---|---|---|---|
-| gradient boosting, 21 hand-crafted features, 4 past epochs | — | — | — | 0.783 | 0.727 | 0.708 |
-| **CNN-xs, int8, 4 past epochs** | **1 685** | **3.3 KiB** | **6.0 KiB** | **0.831** | **0.776** | **0.772** |
-| **CNN-m, int8, 4 past epochs** | **9 589** | **11.4 KiB** | **6.0 KiB** | **0.840** | **0.790** | **0.783** |
+| gradient boosting, 21 hand-crafted features, 4 past epochs | - | - | - | 0.783 | 0.727 | 0.708 |
+| CNN-xs, int8, 4 past epochs | 1 685 | 3.3 KiB | 6.0 KiB | 0.831 | 0.776 | 0.772 |
+| CNN-m, int8, 4 past epochs | 9 589 | 11.4 KiB | 6.0 KiB | 0.840 | 0.790 | 0.783 |
 | CNN-l, int8, 4 past epochs | 21 549 | 23.4 KiB | 12.0 KiB | 0.844 | 0.795 | 0.789 |
 
-* int8 predictions agree with the float model on **98.2–99.0 %** of the 42 307 held-out epochs, with no κ loss (|Δκ| ≤ 0.001).
-* The C kernel, compiled with the host `cc` and fed raw float µV, reproduces the NumPy int8 reference **bit for bit** (100.000 % of int8 logits identical on all 8 154 fold-0 test epochs, for all 10 models).
-* Flash and RAM are `arm-none-eabi-size` of kernel + weights for `-mcpu=cortex-m4 -mfloat-abi=hard -Os`, *not* measured on a board. Latency is an estimate, see below.
-* A 1.7 k-parameter network beats a gradient-boosted tree ensemble on hand-crafted spectral features by 0.06 κ. Going from 1.7 k to 21 k parameters buys only +0.017 κ; adding 2 minutes of causal context buys +0.03–0.04 κ at every size.
-
-![hypnogram](figures/hypnogram.png)
-
-## Why I built this
-
-<!-- TODO(Tommaso): dictate 3-4 lines in your own words -->
+* int8 predictions agree with the float model on 98.2–99.0 % of the 42 307 held-out epochs, with no κ loss (|Δκ| ≤ 0.001).
+* The C kernel, compiled with the host `cc` and fed raw float µV, gives int8 logits identical to the NumPy reference on all 8 154 fold-0 test epochs, for all 10 models.
+* Flash and RAM are `arm-none-eabi-size` of kernel + weights for `-mcpu=cortex-m4 -mfloat-abi=hard -Os`, not measured on a board. Latency is an estimate, see below.
 
 ## Pipeline
 
@@ -50,7 +45,7 @@ Two adjacent 30 s epochs of the same night are almost the same signal: same elec
 
 ## Methods
 
-### Classical baseline — 21 features per epoch
+### Classical baseline, 21 features per epoch
 
 **Welch PSD.** Each epoch $x[n]$, $n=0..N-1$, is cut into $M$ Hann-windowed segments of $L = 200$ samples (2 s) with 50 % overlap:
 
@@ -76,7 +71,7 @@ $$
 \mathrm{Complexity} = \frac{\mathrm{Mobility}(x')}{\mathrm{Mobility}(x)}
 $$
 
-For a sampled sine of frequency $f$, $\mathrm{Mobility} = 2\sin(\pi f/f_s)$ exactly — that identity is a unit test.
+For a sampled sine of frequency $f$, $\mathrm{Mobility} = 2\sin(\pi f/f_s)$ exactly, that identity is a unit test.
 
 Plus θ/α, δ/β, σ/θ, α/δ log-ratios, log peak-to-peak and zero-crossing rate. Classifiers: L2 logistic regression (class-balanced) and histogram gradient boosting (300 trees). With context, the feature vectors of the previous $K=4$ epochs are concatenated (causal, same as the CNN).
 
@@ -100,9 +95,9 @@ $$
 r_\ell = r_{\ell-1} + (k_\ell - 1)\,j_{\ell-1},\qquad j_\ell = j_{\ell-1}\,s_\ell
 $$
 
-which gives $r = 957$ samples = 9.6 s for every width (only channels change). The global average pool then integrates the whole 30 s epoch: each output unit sees ~10 s windows, the classifier sees their average — which is the right inductive bias for spindles (0.5–2 s), K-complexes (~1 s) and slow waves (>0.5 s) that can occur anywhere in the epoch.
+which gives $r = 957$ samples = 9.6 s for every width (only channels change). The global average pool then integrates the whole 30 s epoch: each output unit sees ~10 s windows, the classifier sees their average, which is the right inductive bias for spindles (0.5–2 s), K-complexes (~1 s) and slow waves (>0.5 s) that can occur anywhere in the epoch.
 
-**Sequence context, causal.** Scorers look at neighbouring epochs (N1/REM are defined partly by what came before). The head sees $[e_t, e_{t-1}, \dots, e_{t-K}]$, so on the MCU we only store $K \cdot D$ bytes of past embeddings — not past raw signal — and the model can run on-line. Missing history at the start of the night is filled with $e_0$, identically in PyTorch, NumPy and C. Training: stage 1 trains encoder + context-free head end-to-end (AdamW, one-cycle LR, 20 epochs, class weights $\propto 1/\sqrt{\text{freq}}$, random gain 0.8–1.25 and white noise as augmentation, early stopping on validation κ); stage 2 freezes the encoder and fits the linear context head for $K \in \{0, 2, 4, 8\}$.
+**Sequence context, causal.** Scorers look at neighbouring epochs (N1/REM are defined partly by what came before). The head sees $[e_t, e_{t-1}, \dots, e_{t-K}]$, so on the MCU we only store $K \cdot D$ bytes of past embeddings, not past raw signal, and the model can run on-line. Missing history at the start of the night is filled with $e_0$, identically in PyTorch, NumPy and C. Training: stage 1 trains encoder + context-free head end-to-end (AdamW, one-cycle LR, 20 epochs, class weights $\propto 1/\sqrt{\text{freq}}$, random gain 0.8–1.25 and white noise as augmentation, early stopping on validation κ); stage 2 freezes the encoder and fits the linear context head for $K \in \{0, 2, 4, 8\}$.
 
 ### int8 post-training quantisation, and the C kernel
 
@@ -138,29 +133,29 @@ All numbers are pooled over the 5 test folds (20 subjects, 39 nights, 42 307 epo
 | LogReg, 21 features × (t … t−4) | 0.762 | 0.712 | 0.684 | 0.77 | 0.40 | 0.84 | 0.87 | 0.68 |
 | Gradient boosting, 21 features × (t … t−4) | 0.783 | 0.727 | 0.708 | 0.82 | 0.39 | 0.85 | 0.88 | 0.70 |
 | CNN-xs, K=0, float | 0.807 | 0.729 | 0.738 | 0.87 | 0.29 | 0.87 | 0.87 | 0.75 |
-| **CNN-xs, K=0, int8** | 0.808 | 0.732 | 0.739 | 0.87 | 0.30 | 0.87 | 0.87 | 0.75 |
+| CNN-xs, K=0, int8 | 0.808 | 0.732 | 0.739 | 0.87 | 0.30 | 0.87 | 0.87 | 0.75 |
 | CNN-xs, K=4, float | 0.831 | 0.775 | 0.771 | 0.90 | 0.42 | 0.87 | 0.88 | 0.80 |
-| **CNN-xs, K=4, int8** | 0.831 | 0.776 | 0.772 | 0.90 | 0.43 | 0.87 | 0.88 | 0.80 |
+| CNN-xs, K=4, int8 | 0.831 | 0.776 | 0.772 | 0.90 | 0.43 | 0.87 | 0.88 | 0.80 |
 | CNN-s, K=0, float | 0.815 | 0.741 | 0.748 | 0.87 | 0.33 | 0.87 | 0.88 | 0.76 |
-| **CNN-s, K=0, int8** | 0.815 | 0.742 | 0.748 | 0.86 | 0.34 | 0.87 | 0.88 | 0.76 |
+| CNN-s, K=0, int8 | 0.815 | 0.742 | 0.748 | 0.86 | 0.34 | 0.87 | 0.88 | 0.76 |
 | CNN-s, K=4, float | 0.837 | 0.785 | 0.780 | 0.89 | 0.46 | 0.88 | 0.88 | 0.82 |
-| **CNN-s, K=4, int8** | 0.837 | 0.784 | 0.779 | 0.88 | 0.45 | 0.88 | 0.88 | 0.82 |
+| CNN-s, K=4, int8 | 0.837 | 0.784 | 0.779 | 0.88 | 0.45 | 0.88 | 0.88 | 0.82 |
 | CNN-m, K=0, float | 0.812 | 0.736 | 0.744 | 0.86 | 0.32 | 0.87 | 0.87 | 0.75 |
-| **CNN-m, K=0, int8** | 0.811 | 0.736 | 0.743 | 0.86 | 0.32 | 0.87 | 0.88 | 0.75 |
+| CNN-m, K=0, int8 | 0.811 | 0.736 | 0.743 | 0.86 | 0.32 | 0.87 | 0.88 | 0.75 |
 | CNN-m, K=4, float | 0.841 | 0.791 | 0.784 | 0.88 | 0.49 | 0.88 | 0.88 | 0.82 |
-| **CNN-m, K=4, int8** | 0.840 | 0.790 | 0.783 | 0.88 | 0.49 | 0.88 | 0.89 | 0.82 |
+| CNN-m, K=4, int8 | 0.840 | 0.790 | 0.783 | 0.88 | 0.49 | 0.88 | 0.89 | 0.82 |
 | CNN-l, K=0, float | 0.820 | 0.756 | 0.756 | 0.87 | 0.38 | 0.87 | 0.88 | 0.78 |
-| **CNN-l, K=0, int8** | 0.821 | 0.758 | 0.757 | 0.87 | 0.39 | 0.87 | 0.88 | 0.78 |
+| CNN-l, K=0, int8 | 0.821 | 0.758 | 0.757 | 0.87 | 0.39 | 0.87 | 0.88 | 0.78 |
 | CNN-l, K=4, float | 0.844 | 0.793 | 0.788 | 0.88 | 0.49 | 0.88 | 0.89 | 0.84 |
-| **CNN-l, K=4, int8** | 0.844 | 0.795 | 0.789 | 0.88 | 0.49 | 0.88 | 0.89 | 0.84 |
+| CNN-l, K=4, int8 | 0.844 | 0.795 | 0.789 | 0.88 | 0.49 | 0.88 | 0.89 | 0.84 |
 | CNN-xl, K=0, float | 0.820 | 0.758 | 0.756 | 0.87 | 0.39 | 0.87 | 0.89 | 0.77 |
-| **CNN-xl, K=0, int8** | 0.819 | 0.758 | 0.755 | 0.87 | 0.40 | 0.87 | 0.89 | 0.77 |
+| CNN-xl, K=0, int8 | 0.819 | 0.758 | 0.755 | 0.87 | 0.40 | 0.87 | 0.89 | 0.77 |
 | CNN-xl, K=4, float | 0.842 | 0.793 | 0.786 | 0.88 | 0.49 | 0.88 | 0.89 | 0.83 |
-| **CNN-xl, K=4, int8** | 0.842 | 0.793 | 0.786 | 0.88 | 0.49 | 0.88 | 0.89 | 0.83 |
+| CNN-xl, K=4, int8 | 0.842 | 0.793 | 0.786 | 0.88 | 0.49 | 0.88 | 0.89 | 0.83 |
 
 int8 rows are the bit-exact NumPy reference of the C kernel over all 5 folds (the C binary itself was run on fold 0, see below).
 
-What the per-class columns say: with 4 past epochs, W, N2, N3 and REM are at 0.80–0.90 F1 for every CNN size; **N1 is the stage that separates models** (0.29 → 0.49) and the one that context helps most (+0.13 F1 for xs). In the confusion matrix below, N1 leaks to W, N2 and REM in roughly equal parts — it *is* a transition stage, and on a frontal channel without EOG/EMG REM looks like N1 (see the PSD figure).
+What the per-class columns say: with 4 past epochs, W, N2, N3 and REM are at 0.80–0.90 F1 for every CNN size; N1 is the stage that separates models (0.29 → 0.49) and the one that context helps most (+0.13 F1 for xs). In the confusion matrix below, N1 leaks to W, N2 and REM in roughly equal parts, it *is* a transition stage, and on a frontal channel without EOG/EMG REM looks like N1 (see the PSD figure).
 
 ![confusion](figures/confusion.png)
 
@@ -181,7 +176,7 @@ What the per-class columns say: with 4 past epochs, W, N2, N3 and REM are at 0.8
 
 ![pareto](figures/pareto.png)
 
-Context ablation (float, pooled κ) — the linear head over $[e_t, \dots, e_{t-K}]$:
+Context ablation (float, pooled κ), the linear head over $[e_t, \dots, e_{t-K}]$:
 
 | | K=0 | K=2 | K=4 | K=8 |
 |---|---|---|---|---|
@@ -191,7 +186,7 @@ Context ablation (float, pooled κ) — the linear head over $[e_t, \dots, e_{t-
 | l | 0.756 | 0.787 | 0.788 | 0.790 |
 | xl | 0.756 | 0.785 | 0.786 | 0.784 |
 
-**How much of this is noise.** Resampling the 20 subjects with replacement (2 000 bootstrap draws) gives 95 % intervals about ±0.04 wide for every model (e.g. CNN-m K=4: [0.741, 0.820]); the subject you happen to test on matters more than the architecture. Paired over the same resamples: K=4 vs K=0 for CNN-m is **+0.040 [0.026, 0.053]** — clearly real; CNN-l vs CNN-xs (both K=4) is **+0.017 [0.001, 0.030]** — barely distinguishable from zero. xl is not better than l. The honest reading of the Pareto front: **the knee is at a few thousand parameters; past ~5 k, capacity is not what limits a single frontal channel.** (`scripts/tables.py` prints all of it.)
+**How much of this is noise.** Resampling the 20 subjects with replacement (2 000 bootstrap draws) gives 95 % intervals about ±0.04 wide for every model (e.g. CNN-m K=4: [0.741, 0.820]); the subject you happen to test on matters more than the architecture. Paired over the same resamples: K=4 vs K=0 for CNN-m is +0.040 [0.026, 0.053], clearly real; CNN-l vs CNN-xs (both K=4) is +0.017 [0.001, 0.030], barely distinguishable from zero. xl is not better than l. The reading of the Pareto front: the knee is at a few thousand parameters; past ~5 k, capacity is not what limits a single frontal channel. (`scripts/tables.py` prints all of it.)
 
 ### int8 vs float, and C vs Python
 
@@ -203,39 +198,39 @@ The C check runs `c/main.c` on a binary dump of the 8 nights of fold 0's test su
 
 **Measured with the compiler** (`arm-none-eabi-gcc 15.2`, `-Os`, kernel + weights + exactly-sized static buffers, no startup/HAL): see the flash/RAM columns above. RAM is two ping-pong activation buffers (the int8 input epoch, 3 000 B, is the largest tensor up to *m*) + $(K+1)\,D$ bytes of embedding history. Weights dominate flash from *s* upwards; kernel code + layer tables are 1 322 B for every model.
 
-**Estimated, not measured — latency.** Assumptions, stated so they can be checked:
+**Latency, estimated rather than measured.** Assumptions, stated so they can be checked:
 
 * MACs per epoch from the layer shapes (table above); everything else (requantisation, pooling, input scaling) is < 5 % of that.
-* The reference kernel's inner loop compiles (`-O2`, Cortex-M4) to 13 instructions per MAC: two `LDRSB`, a zero-point subtraction, `MLA`, plus a padding bounds check and loop overhead. At ≈ 1.2 cycles per instruction that is **≈ 16 cycles/MAC**, which gives the "est. ms" column: 27 ms (xs) to 0.42 s (xl) per 30 s epoch at 128 MHz, i.e. a duty cycle of 0.1–1.4 %.
-* A CMSIS-NN-style kernel (pre-padded input, `SMLAD` doing two 16-bit MACs per cycle, unrolled loops) should get to roughly 1–2 cycles/MAC, i.e. another ~8–16× — an expectation, not something I have measured.
+* The reference kernel's inner loop compiles (`-O2`, Cortex-M4) to 13 instructions per MAC: two `LDRSB`, a zero-point subtraction, `MLA`, plus a padding bounds check and loop overhead. At ≈ 1.2 cycles per instruction that is ≈ 16 cycles/MAC, which gives the "est. ms" column: 27 ms (xs) to 0.42 s (xl) per 30 s epoch at 128 MHz, i.e. a duty cycle of 0.1–1.4 %.
+* A CMSIS-NN-style kernel (pre-padded input, `SMLAD` doing two 16-bit MACs per cycle, unrolled loops) should get to roughly 1–2 cycles/MAC, i.e. another ~8–16×, an expectation, not something I have measured.
 * The Cortex-M33 (e.g. nRF54L15 at 128 MHz) has the same DSP extension; the `-mcpu=cortex-m33` build has byte-identical flash/RAM to the M4F one for all 10 models.
 
 Either way, the network is not the bottleneck: the MCU spends > 98 % of each epoch asleep, and the AFE and radio will dominate the energy budget.
 
 ### Comparison with the literature (read as trend, not as a leaderboard)
 
-On the same 20 subjects and the same channel, DeepSleepNet (Supratak et al., 2017) reports **82.0 % accuracy and 76.9 macro-F1** (abstract of the paper, 20-fold CV, Fpz-Cz). It uses a two-branch CNN plus a *bidirectional* LSTM over the whole sequence, so it sees future epochs and is not causal. TinySleepNet (Supratak & Guo, 2020) reports higher numbers with a much smaller model than DeepSleepNet; I did not verify its exact figures, so I don't quote them.
+On the same 20 subjects and the same channel, DeepSleepNet (Supratak et al., 2017) reports 82.0 % accuracy and 76.9 macro-F1 (abstract of the paper, 20-fold CV, Fpz-Cz). It uses a two-branch CNN plus a *bidirectional* LSTM over the whole sequence, so it sees future epochs and is not causal. TinySleepNet (Supratak & Guo, 2020) reports higher numbers with a much smaller model than DeepSleepNet; I did not verify its exact figures, so I don't quote them.
 
 What can be said honestly:
 
 * our numbers are in the same band as those published single-channel models, with 2–4 orders of magnitude fewer parameters and causal context only;
-* but folds, wake trimming, the R&K → AASM mapping, the number of CV folds and whether metrics are pooled or averaged all differ between papers, and each moves κ by a few hundredths — about the size of the differences between our own models. This table is a sanity check that nothing is badly broken, not a ranking.
+* but folds, wake trimming, the R&K → AASM mapping, the number of CV folds and whether metrics are pooled or averaged all differ between papers, and each moves κ by a few hundredths, about the size of the differences between our own models. This table is a sanity check that nothing is badly broken, not a ranking.
 
 ### What the spectrum says
 
 ![psd](figures/psd_per_stage.png)
 
-The textbook picture comes out of the raw data without any model: N3 has the most δ power (~7 dB above N2 at 1 Hz), N2 and N3 show the σ bump at 12–15 Hz (spindles), wake dominates everything above 15 Hz (on a forehead channel that is as much muscle and eye-movement artefact as cortical β, and there is little α at Fpz-Cz), and REM and N1 sit almost on top of each other — exactly the pair every model confuses.
+The textbook picture comes out of the raw data without any model: N3 has the most δ power (~7 dB above N2 at 1 Hz), N2 and N3 show the σ bump at 12–15 Hz (spindles), wake dominates everything above 15 Hz (on a forehead channel that is as much muscle and eye-movement artefact as cortical β, and there is little α at Fpz-Cz), and REM and N1 sit almost on top of each other, exactly the pair every model confuses.
 
 ## Limitations
 
 * **20 healthy subjects aged 25–34 (10 F, 10 M), one lab, one recording system.** Nothing here says anything about older people, patients (apnea, insomnia, narcolepsy), medication, or a different electrode montage. A dry-electrode headband will have a different noise floor, impedance and artefact profile than the clinical PSG electrodes used here.
 * **One scorer, R&K rules.** Labels are a single expert's R&K hypnogram mapped to AASM; inter-scorer agreement on the full five classes is itself well below 1, and N1 is the least reliable stage for humans too. Our N1 F1 (~0.4–0.5) is the weakest number and should be read that way.
 * **No hyper-parameter search across folds**, one seed per fold. Differences of ≤ 0.01 κ between models are inside the subject-bootstrap noise (±0.04).
-* **Validation subjects** for early stopping come from the next fold's test block, so they are disjoint from the training *and* the test subjects of that fold — but the architecture choices (layer shapes, 20 epochs, clip at ±200 µV) were made by me while looking at early results on fold 0. Mild optimistic bias is possible.
+* **Validation subjects** for early stopping come from the next fold's test block, so they are disjoint from the training *and* the test subjects of that fold, but the architecture choices (layer shapes, 20 epochs, clip at ±200 µV) were made by me while looking at early results on fold 0. Mild optimistic bias is possible.
 * **Footprint numbers are compiler measurements, not device measurements.** Flash/RAM come from `arm-none-eabi-size` on the kernel + model objects (no startup code, no HAL, no BLE stack). Latency is a static estimate (below), never run on silicon.
 * **The raw epoch buffer is not counted** in the model RAM: 3000 samples must be stored somewhere before the per-epoch mean is known (6 KiB as int16, 12 KiB as float). A streaming high-pass filter instead of per-epoch mean removal would remove that requirement; not done here.
-* **PTQ only**, no quantisation-aware training — it was not needed (≤ 0.001 κ loss) but the margin may be smaller on other data.
+* **PTQ only**, no quantisation-aware training; it was not needed (≤ 0.001 κ loss) but the margin may be smaller on other data.
 
 ## Reproduce
 
